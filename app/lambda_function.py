@@ -11,9 +11,9 @@ import datetime
 from bson import json_util
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
-from kafka import KafkaProducer                                                                 
-from elasticsearch import Elasticsearch                                  
-import urllib.request                                                     
+from kafka import KafkaProducer                                                               
+from elasticsearch import Elasticsearch                                        
+import urllib.request                                                    
 from base64 import b64decode
 
 """
@@ -34,6 +34,7 @@ MAX_LOOP: The max for the iterator loop.
 SNS_TOPIC_ARN_ALERT: The topic to send exceptions.    
 SNS_TOPIC_ARN_EVENT: The topic to send docdb events.    
 BUCKET_NAME: The name of the bucket that will save streamed data. 
+BUCKET_PATH: The path of the bucket that will save streamed data. 
 ES_INDEX_NAME: The name of the Elasticsearch index where data should be streamed.
 ELASTICSEARCH_URI: The URI of the Elasticsearch domain where data should be streamed.
 KINESIS_STREAM : The Kinesis Stream name to publish DocumentDB events.
@@ -217,7 +218,7 @@ def load_data_s3(filename):
 
     try:
         logger.debug('Loading batch to S3.')
-        response = s3_client.upload_file('/tmp/'+filename, os.environ['BUCKET_NAME'], 
+        response = s3_client.upload_file('/tmp/'+filename, os.environ['BUCKET_NAME'], str(os.environ['BUCKET_PATH']) +
             str(os.environ['WATCHED_DB_NAME']) + '/' + str(os.environ['WATCHED_COLLECTION_NAME']) + '/' + filename)
     except Exception as ex:
         logger.error('Exception in loading data to s3 message: {}'.format(ex))
@@ -281,7 +282,7 @@ def publish_kinesis_event(pkey,message):
 
 def lambda_handler(event, context):
     """Read any new events from DocumentDB and apply them to an streaming/datastore endpoint."""
-
+    events_processed = 0
     try:
         
         # S3 client set up   
@@ -314,7 +315,6 @@ def lambda_handler(event, context):
         logger.debug("last_processed_id: {}".format(last_processed_id))
 
         with collection_client.watch(full_document='updateLookup', resume_after=last_processed_id) as change_stream:
-            events_processed = 0
             i = 0
 
             while change_stream.alive and i < int(os.environ['MAX_LOOP']):
@@ -395,7 +395,7 @@ def lambda_handler(event, context):
 
                     events_processed += 1
 
-                    if events_processed >= state_sync_count:
+                    if events_processed >= state_sync_count and "BUCKET_NAME" not in os.environ:
                         # To reduce DocumentDB IO, only persist the stream state every N events
                         store_last_processed_id(change_stream.resume_token)
                         logger.debug('Synced token {} to state collection'.format(change_stream.resume_token))
