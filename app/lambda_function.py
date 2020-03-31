@@ -23,6 +23,7 @@ Required environment variables:
 DOCUMENTDB_URI: The URI of the DocumentDB cluster to stream from.
 DOCUMENTDB_USR: The user to connect to the DocumentDB cluster to stream from.
 DOCUMENTDB_PSW: The password to connect to the DocumentDB cluster to stream from.
+DOCUMENTDB_ISODATE: Array that contains ISODate attributes to cast them. 
 STATE_COLLECTION: The name of the collection in which to store sync state.
 STATE_DB: The name of the database in which to store sync state.
 STATE_SYNC_COUNT: How many events to process before syncing state.
@@ -283,6 +284,7 @@ def publish_kinesis_event(pkey,message):
 def lambda_handler(event, context):
     """Read any new events from DocumentDB and apply them to an streaming/datastore endpoint."""
     events_processed = 0
+
     try:
         
         # S3 client set up   
@@ -318,6 +320,7 @@ def lambda_handler(event, context):
             i = 0
 
             while change_stream.alive and i < int(os.environ['MAX_LOOP']):
+            
                 i += 1
                 change_event = change_stream.try_next()
                 logger.debug('Event: {}'.format(change_event))
@@ -329,7 +332,7 @@ def lambda_handler(event, context):
                         time.sleep(1)
                         continue
                     else:
-                        return
+                        break
                 else:
                     op_type = change_event['operationType']
 
@@ -347,20 +350,20 @@ def lambda_handler(event, context):
 
                         # Append event for S3 micro-batch
                         if "BUCKET_NAME" in os.environ:
-                            fobj.write(str(payload))
+                            fobj.write(json_util.dumps(payload))
                             fobj.write("\n")
                         
                         # Publish event to Kinesis
                         if "KINESIS_STREAM" in os.environ:
-                            publish_kinesis_event(str(doc_id),str(payload))
+                            publish_kinesis_event(str(doc_id),json_util.dumps(payload))
 
                         # Publish event to MSK
                         if "MSK_BOOTSTRAP_SRV" in os.environ:
-                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], str(doc_id), str(payload))
+                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], str(doc_id), json_util.dumps(payload))
 
                         # Publish event to SNS
                         if "SNS_TOPIC_ARN_EVENT" in os.environ:
-                            publish_sns_event(str(payload))
+                            publish_sns_event(json_util.dumps(payload))
 
                         logger.debug('Processed event ID {}'.format(doc_id))
 
@@ -376,20 +379,20 @@ def lambda_handler(event, context):
 
                         # Append event for S3 micro-batch
                         if "BUCKET_NAME" in os.environ:
-                            fobj.write(str(payload))
+                            fobj.write(json_util.dumps(payload))
                             fobj.write("\n")
 
                         # Publish event to Kinesis
                         if "KINESIS_STREAM" in os.environ:
-                            publish_kinesis_event(str(doc_id),str(payload))
+                            publish_kinesis_event(str(doc_id),json_util.dumps(payload))
 
                         # Publish event to MSK
                         if "MSK_BOOTSTRAP_SRV" in os.environ:
-                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], doc_id, str(payload))   
+                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], doc_id, json_util.dumps(payload))   
 
                         # Publish event to SNS
                         if "SNS_TOPIC_ARN_EVENT" in os.environ:
-                            publish_sns_event(str(payload))
+                            publish_sns_event(json_util.dumps(payload))
 
                         logger.debug('Processed event ID {}'.format(doc_id))
 
@@ -407,36 +410,24 @@ def lambda_handler(event, context):
             # Store the last known good state so our next invocation
             # starts from the most recently available data
             store_last_processed_id(None)
-        return{
-            'statusCode': 551,
-            'description': 'Sync Replication Error',
-            'detail': json.dumps(str(of))
-        }
+        raise
 
     except Exception as ex:
         logger.error('Exception in executing replication: {}'.format(ex))
         send_sns_alert(str(ex))
-        return{
-            'statusCode': 550,
-            'description': 'Replication Error',
-            'detail': json.dumps(str(ex))
-        }
+        raise
 
-    finally:
-
-        # S3 - close temp object and load data
-        if "BUCKET_NAME" in os.environ:
-            fobj.close()
-            load_data_s3(filename)
+    else:
         
-        # Close Kafka client
-        if "MSK_BOOTSTRAP_SRV" in os.environ:                                                 
-            kafka_client.close()
-
         if events_processed > 0:
+
+            # S3 - close temp object and load data
+            if "BUCKET_NAME" in os.environ:
+                fobj.close()
+                load_data_s3(filename)
+
             store_last_processed_id(change_stream.resume_token)
             logger.debug('Synced token {} to state collection'.format(change_stream.resume_token))
-            
             return{
                 'statusCode': 200,
                 'description': 'Success',
@@ -448,3 +439,13 @@ def lambda_handler(event, context):
                 'description': 'Success',
                 'detail': json.dumps('No records to process.')
             }
+
+    finally:
+
+        # S3 - close temp object
+        if "BUCKET_NAME" in os.environ:
+            fobj.close()
+
+        # Close Kafka client
+        if "MSK_BOOTSTRAP_SRV" in os.environ:                                                 
+            kafka_client.close()
