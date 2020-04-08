@@ -35,22 +35,22 @@ If you already have the KMS key, you can comment the KMS Resource and instead en
 
 # Environment Varibles for targets
 Kafka target environment variables:
-MSK_BOOTSTRAP_SRV: The URIs of the MSK cluster to publish messages. 
-MSK_TOPIC_NAME: MSK topic name that will host the docdb messages. 
+- MSK_BOOTSTRAP_SRV: The URIs of the MSK cluster to publish messages. 
+- MSK_TOPIC_NAME: MSK topic name that will host the docdb messages. 
 
 SNS target environment variables:
-SNS_TOPIC_ARN_EVENT: The topic to send docdb events.    
+- SNS_TOPIC_ARN_EVENT: The topic to send docdb events.    
 
 S3 target environment variables:
-BUCKET_NAME: The name of the bucket that will save streamed data. 
-BUCKET_PATH: The path of the bucket that will save streamed data. 
+- BUCKET_NAME: The name of the bucket that will save streamed data. 
+- BUCKET_PATH: The path of the bucket that will save streamed data. 
 
 ElasticSearch target environment variables:
-ES_INDEX_NAME: The name of the Elasticsearch index where data should be streamed.
-ELASTICSEARCH_URI: The URI of the Elasticsearch domain where data should be streamed.
+- ES_INDEX_NAME: The name of the Elasticsearch index where data should be streamed.
+- ELASTICSEARCH_URI: The URI of the Elasticsearch domain where data should be streamed.
 
 Kinesis target environment variables:
-KINESIS_STREAM : The Kinesis Stream name to publish DocumentDB events.
+- KINESIS_STREAM : The Kinesis Stream name to publish DocumentDB events.
 
 # Future work
 1. Enable micro-batching for ElasticSearch, MSK, and Kinesis.  
