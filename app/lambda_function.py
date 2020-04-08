@@ -23,21 +23,30 @@ Required environment variables:
 DOCUMENTDB_URI: The URI of the DocumentDB cluster to stream from.
 DOCUMENTDB_USR: The user to connect to the DocumentDB cluster to stream from.
 DOCUMENTDB_PSW: The password to connect to the DocumentDB cluster to stream from.
-DOCUMENTDB_ISODATE: Array that contains ISODate attributes to cast them. 
 STATE_COLLECTION: The name of the collection in which to store sync state.
 STATE_DB: The name of the database in which to store sync state.
-STATE_SYNC_COUNT: How many events to process before syncing state.
 WATCHED_COLLECTION_NAME: The name of the collection to watch for changes.
 WATCHED_DB_NAME: The name of the database to watch for changes.
+STATE_SYNC_COUNT: How many events to process before syncing state.
+MAX_LOOP: The max for the iterator loop. 
+SNS_TOPIC_ARN_ALERT: The topic to send exceptions.   
+
+Kafka target environment variables:
 MSK_BOOTSTRAP_SRV: The URIs of the MSK cluster to publish messages. 
 MSK_TOPIC_NAME: MSK topic name that will host the docdb messages. 
-MAX_LOOP: The max for the iterator loop.  
-SNS_TOPIC_ARN_ALERT: The topic to send exceptions.    
+
+SNS target environment variables:
 SNS_TOPIC_ARN_EVENT: The topic to send docdb events.    
+
+S3 target environment variables:
 BUCKET_NAME: The name of the bucket that will save streamed data. 
 BUCKET_PATH: The path of the bucket that will save streamed data. 
+
+ElasticSearch target environment variables:
 ES_INDEX_NAME: The name of the Elasticsearch index where data should be streamed.
 ELASTICSEARCH_URI: The URI of the Elasticsearch domain where data should be streamed.
+
+Kinesis target environment variables:
 KINESIS_STREAM : The Kinesis Stream name to publish DocumentDB events.
 
 """
@@ -108,9 +117,11 @@ def get_last_processed_id():
     try:
         last_processed_id = None
         state_collection = get_state_collection_client()
-        state_doc = state_collection.find_one({'currentState': True})
+        state_doc = state_collection.find_one({'currentState': True, 'dbWatched': str(os.environ['WATCHED_DB_NAME']), 
+            'collectionWatched': str(os.environ['WATCHED_COLLECTION_NAME'])})
         if state_doc is not None:
-            last_processed_id = state_doc['lastProcessed']
+            if 'lastProcessed' in state_doc: 
+                last_processed_id = state_doc['lastProcessed']
         else:
             state_collection.insert({'dbWatched': str(os.environ['WATCHED_DB_NAME']), 
                 'collectionWatched': str(os.environ['WATCHED_COLLECTION_NAME']), 'currentState': True})
@@ -220,7 +231,8 @@ def load_data_s3(filename):
     try:
         logger.debug('Loading batch to S3.')
         response = s3_client.upload_file('/tmp/'+filename, os.environ['BUCKET_NAME'], str(os.environ['BUCKET_PATH']) +
-            str(os.environ['WATCHED_DB_NAME']) + '/' + str(os.environ['WATCHED_COLLECTION_NAME']) + '/' + filename)
+            str(os.environ['WATCHED_DB_NAME']) + '/' + str(os.environ['WATCHED_COLLECTION_NAME']) + '/' + 
+            datetime.datetime.now().strftime('%Y/%m/%d/') + filename)
     except Exception as ex:
         logger.error('Exception in loading data to s3 message: {}'.format(ex))
         send_sns_alert(str(ex))
@@ -320,6 +332,7 @@ def lambda_handler(event, context):
             i = 0
 
             while change_stream.alive and i < int(os.environ['MAX_LOOP']):
+                print(i)
             
                 i += 1
                 change_event = change_stream.try_next()
@@ -400,6 +413,7 @@ def lambda_handler(event, context):
 
                     if events_processed >= state_sync_count and "BUCKET_NAME" not in os.environ:
                         # To reduce DocumentDB IO, only persist the stream state every N events
+                        print('events processed wtf')
                         store_last_processed_id(change_stream.resume_token)
                         logger.debug('Synced token {} to state collection'.format(change_stream.resume_token))
 
