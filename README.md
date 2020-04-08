@@ -8,9 +8,11 @@ Lambdas run within VPC therefore it is necessary that it runs in at least one pr
 
 Lambda uses documentDB credentials and password is encrypted using KMS.    
 
-To enable a target, you just need to include a value for its environment varibles within the lambda. 
+The lambda function uses 3 variables to control how many events replicates; users are encourage to tune this variables according to the throughput of the collection. This elements are the lambda timeout that is set to 90 seconds and the following environment varibles:
+- MAX_LOOP is a control variable to avoid that the lambda times out in an inconsistent state. This is set to 45. 
+- STATE_SYNC_COUNT is a control varible that determines how many iteration should the lambda wait before syncing the resume token. It is meant to reduce IO operations on AWS DocumentDB. This is set to 15.
 
-######## Explain how the loop runs. ############# 5 mins by default.
+To enable a target, you need to include a value for its environment varibles within the lambda and add permissions to the lambda role or network accordingly. 
 
 # How to install
 0. Enable change streams at collection level. Follow instructions given here: https://docs.aws.amazon.com/documentdb/latest/developerguide/change-streams.html
@@ -26,10 +28,10 @@ To enable a target, you just need to include a value for its environment varible
     6. You will need to fill in the parameters for the documentDB state database and collection. 
     7. You will need to fill in the parameters for the documentDB watched database and collection. 
     8. You will need to fill in the parameters for the state sync count and max loop. 
-    9. You will need to fill in the parameters for the SNS topic arn to send exceptions. 
-5. Cloudwatch rule is schedule to run every 5 minutes and is disabled by design, modify according to your needs and enable it. 
+5. Cloudwatch rule is schedule to run every 5 minutes and is disabled by design, modify according to your needs and enable it. Take also into account the control variables mentioned above. 
+6. A SNS topic will be created to send exceptions. 
 
-If you alread have the KMS CMK, you can comment the KMS Resource and instead enable it as a CFN parameter (uncomment this part in the CFN). Review the policies and the custom resource that make use of the KMS CMK and make the changes to use the parameter instead.  
+If you already have the KMS key, you can comment the KMS Resource and instead enable it as a CFN parameter (uncomment this part in the CFN). Review the policies and the custom resource that make use of the KMS and make the changes to use the parameter instead.  
 
 # Environment Varibles for targets
 Kafka target environment variables:
