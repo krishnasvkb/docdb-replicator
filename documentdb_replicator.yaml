@@ -5,7 +5,7 @@ Parameters:
     Description: The S3 Bucket that holds the lambdas
     Type: String
   ParamS3KeyLambda1:
-    Description: The S3 key for the lambda code zip file that monitors documentdb
+    Description: The S3 key for the lambda code zip file that replicates documentdb change streams
     Type: String
   ParamS3KeyLambda2:
     Description: The S3 key for the lambda code zip file that encrypts the password
@@ -223,7 +223,7 @@ Resources:
           DOCUMENTDB_PSW: !GetAtt EncrypterResource.var
           STATE_SYNC_COUNT: !Ref SyncCount
           MAX_LOOP: !Ref MaxLoop
-      FunctionName: !Sub "aws-lambda-docdb-monitor-${AWS::StackName}"
+      FunctionName: !Sub "aws-lambda-docdb-change-streams-${AWS::StackName}"
       Handler: 'lambda_function.lambda_handler'
       MemorySize: 256
       Role:

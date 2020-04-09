@@ -34,6 +34,7 @@ To enable a target, you need to include a value for its environment varibles wit
 If you already have the KMS key, you can comment the KMS Resource and instead enable it as a CFN parameter (uncomment this part in the CFN). Review the policies and the custom resource that make use of the KMS and make the changes to use the parameter instead.  
 
 # Environment Varibles for targets
+
 Kafka target environment variables:
 MSK_BOOTSTRAP_SRV: The URIs of the MSK cluster to publish messages. 
 MSK_TOPIC_NAME: MSK topic name that will host the docdb messages. 
