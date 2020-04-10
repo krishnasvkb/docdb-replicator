@@ -1,10 +1,10 @@
 # A lambda function to replicate an AWS DocumentDB collection change stream events to different targets
 
-This CloudFormation can be used to deploy a lambda to replicate AWS DocumentDB change streams events to ElasticSearch, Amazon Managed Stream for Kafka (or any other Apache Kafka distro), SNS, AWS Kinesis Streams, and/or S3. S3 replication is done in micro-batches and the rest of the integration are near real-time.  
+This CloudFormation can be used to deploy a lambda to replicate AWS DocumentDB change streams events to ElasticSearch, Amazon Managed Stream for Kafka (or any other Apache Kafka distro), SNS, AWS Kinesis Streams, AWS SQS, and/or S3. S3 replication is done in micro-batches and the rest of the integration are near real-time.  
 
 The lambda function is scheduled using a CloudWatch rule. Everytime the function is triggered it queries the DocumentDB change stream for a specific collection and publish the events in the stream of tha collection to any of the targets enabled. 
 
-Lambdas run within VPC therefore it is necessary that it runs in at least one private subnet that can reach internet using a NAT gateway or privatelinks for the services it needs to integrate with (can be seen in the role created by the cloudformation template). 
+Lambdas run within VPC therefore it is necessary that it runs in at least one private subnet that can reach internet using a NAT gateway or privatelinks for the services it needs to integrate with (can be seen in the role created by the cloudformation template). An Amazon Root CA certificate is required to communicate with Amazon ElasticSearch; if the Lambda does not have Internet access, make sure you load the certificate to the tmp folder of python virtual environment and comment the line of code that invokes the method to get the certificate. 
 
 Lambda uses documentDB credentials and password is encrypted using KMS.    
 
@@ -13,10 +13,6 @@ The lambda function uses 3 variables to control how many events replicates; user
 - STATE_SYNC_COUNT is a control varible that determines how many iteration should the lambda wait before syncing the resume token. It is meant to reduce IO operations on AWS DocumentDB. This is set to 15.
 
 To enable a target, you need to include a value for its environment varibles within the lambda and add permissions to the lambda role or network accordingly. 
-
-####### 'Getting Amazon Root CA certificate.
-####### 'Size of messages
-####### Ordering - SNS
 
 # How to install
 0. Enable change streams at collection level. Follow instructions given here: https://docs.aws.amazon.com/documentdb/latest/developerguide/change-streams.html
@@ -57,6 +53,13 @@ ElasticSearch target environment variables:
 Kinesis target environment variables:
 - KINESIS_STREAM : The Kinesis Stream name to publish DocumentDB events.
 
+SQS target environment variables:
+- SQS_QUERY_URL: The URL of the Amazon SQS queue to which a message is sent.
+
+# Keep in mind
+- SNS does not support ordering. If ordering is a must required, do not use it as target. 
+- Make sure message size limits on targets will support your documents size. 
+
 # Future work
-1. Enable micro-batching for ElasticSearch, MSK, and Kinesis.  
+1. Enable micro-batching for ElasticSearch, MSK, SQS, and Kinesis.  
 2. Evaluate how to do it for multiple collections different than using one lambda per collection. 

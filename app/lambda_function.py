@@ -196,7 +196,7 @@ def get_es_client():
             Use the following method if you Lambda has access to the Internet, 
             otherwise include the certificate within the package. 
         """
-        get_es_certificate()
+        get_es_certificate()                                ### Comment this line if certificate is loaded it as part of the function. 
 
         try:
             es_uri = os.environ['ELASTICSEARCH_URI']
