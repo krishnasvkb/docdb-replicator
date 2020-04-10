@@ -14,6 +14,10 @@ The lambda function uses 3 variables to control how many events replicates; user
 
 To enable a target, you need to include a value for its environment varibles within the lambda and add permissions to the lambda role or network accordingly. 
 
+####### 'Getting Amazon Root CA certificate.
+####### 'Size of messages
+####### Ordering - SNS
+
 # How to install
 0. Enable change streams at collection level. Follow instructions given here: https://docs.aws.amazon.com/documentdb/latest/developerguide/change-streams.html
 1. Create a python virtualenv and move files in app folder to it. Install dependencies and zip it (Python runtime used is 3.7.4).

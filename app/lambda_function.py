@@ -49,14 +49,18 @@ ELASTICSEARCH_URI: The URI of the Elasticsearch domain where data should be stre
 Kinesis target environment variables:
 KINESIS_STREAM : The Kinesis Stream name to publish DocumentDB events.
 
+SQS target environment variables:
+SQS_QUERY_URL: The URL of the Amazon SQS queue to which a message is sent.
+
 """
 
-db_client = None
-kafka_client = None                                                               
-es_client = None     
-kinesis_client = None    
-s3_client = None                                                                             
-sns_client = boto3.client('sns')                 # SNS - used as target and for exception alerting purposes
+db_client = None                        # DocumentDB client - used as source 
+kafka_client = None                     # Kafka client - used as target                                            
+es_client = None                        # ElasticSearch client - used as target 
+kinesis_client = None                   # Kinesis client - used as target 
+s3_client = None                        # S3 client - used as target        
+sqs_client = None                       # SQS client - used as target                                                   
+sns_client = boto3.client('sns')        # SNS client - used as target and for exception alerting purposes
                                   
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -275,7 +279,7 @@ def publish_kinesis_event(pkey,message):
     global kinesis_client
 
     if kinesis_client is None:
-        logger.debug('Creating new S3 client.')
+        logger.debug('Creating new Kinesis client.')
         kinesis_client = boto3.client('kinesis')  
 
     try:
@@ -289,6 +293,29 @@ def publish_kinesis_event(pkey,message):
         )
     except Exception as ex:
         logger.error('Exception in publishing message to Kinesis: {}'.format(ex))
+        send_sns_alert(str(ex))
+        raise
+
+
+def publish_sqs_event(pkey,message):
+    """send event to SQS"""
+    # Use a global variable so Lambda can reuse the persisted client on future invocations
+    global sqs_client
+
+    if sqs_client is None:
+        logger.debug('Creating new SQS client.')
+        sqs_client = boto3.client('sqs')  
+
+    try:
+        logger.debug('Publishing message to SQS.')
+        response = sqs_client.send_message(
+            QueueUrl=os.environ['SQS_QUERY_URL'],
+            MessageBody=message,
+            MessageDeduplicationId=pkey,
+            MessageGroupId=str(os.environ['WATCHED_COLLECTION_NAME'])
+        )
+    except Exception as ex:
+        logger.error('Exception in publishing message to SQS: {}'.format(ex))
         send_sns_alert(str(ex))
         raise
 
@@ -348,6 +375,7 @@ def lambda_handler(event, context):
                         break
                 else:
                     op_type = change_event['operationType']
+                    op_id = change_event['_id']['_data']
 
                     if op_type in ['insert', 'update']:             
                         doc_body = change_event['fullDocument']
@@ -368,17 +396,21 @@ def lambda_handler(event, context):
                         
                         # Publish event to Kinesis
                         if "KINESIS_STREAM" in os.environ:
-                            publish_kinesis_event(str(doc_id),json_util.dumps(payload))
+                            publish_kinesis_event(str(op_id),json_util.dumps(payload))
 
                         # Publish event to MSK
                         if "MSK_BOOTSTRAP_SRV" in os.environ:
-                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], str(doc_id), json_util.dumps(payload))
+                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], op_id, json_util.dumps(payload))
 
                         # Publish event to SNS
                         if "SNS_TOPIC_ARN_EVENT" in os.environ:
                             publish_sns_event(json_util.dumps(payload))
 
-                        logger.debug('Processed event ID {}'.format(doc_id))
+                        # Publish event to SQS
+                        if "SQS_QUERY_URL" in os.environ:
+                            publish_sqs_event(str(op_id),json_util.dumps(payload))
+
+                        logger.debug('Processed event ID {}'.format(op_id))
 
                     if op_type == 'delete':
                         #try:
@@ -397,17 +429,21 @@ def lambda_handler(event, context):
 
                         # Publish event to Kinesis
                         if "KINESIS_STREAM" in os.environ:
-                            publish_kinesis_event(str(doc_id),json_util.dumps(payload))
+                            publish_kinesis_event(str(op_id),json_util.dumps(payload))
 
                         # Publish event to MSK
                         if "MSK_BOOTSTRAP_SRV" in os.environ:
-                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], doc_id, json_util.dumps(payload))   
+                            publish_message(kafka_client, os.environ['MSK_TOPIC_NAME'], op_id, json_util.dumps(payload))   
 
                         # Publish event to SNS
                         if "SNS_TOPIC_ARN_EVENT" in os.environ:
                             publish_sns_event(json_util.dumps(payload))
 
-                        logger.debug('Processed event ID {}'.format(doc_id))
+                        # Publish event to SQS
+                        if "SQS_QUERY_URL" in os.environ:
+                            publish_sqs_event(str(op_id),json_util.dumps(payload))
+
+                        logger.debug('Processed event ID {}'.format(op_id))
 
                     events_processed += 1
 
